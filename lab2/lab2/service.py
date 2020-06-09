@@ -36,13 +36,6 @@ class Service:
         connectionPipeline.execute()
         return id
 
-    def login(self, login):
-        loginIdentifier = self.connection.hget('users:', login)
-        if not loginIdentifier:
-            return -1
-        self.connection.sadd('online:', login)
-        return int(loginIdentifier)
-
     def logout(self, usersId):
         return self.connection.srem('online:', self.connection.hmget(f'user:{ usersId }', ['login'])[0])
 
@@ -70,6 +63,13 @@ class Service:
         for onlineUser in onlineUsers:
             print(onlineUser)
         return onlineUsers
+
+    def login(self, login):
+        loginIdentifier = self.connection.hget('users:', login)
+        if not loginIdentifier:
+            return -1
+        self.connection.sadd('online:', login)
+        return int(loginIdentifier)
 
 
 

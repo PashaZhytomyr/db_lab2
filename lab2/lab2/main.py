@@ -19,37 +19,6 @@ def menuForLoggedUser():
     return int(input('>: '))
 
 
-def userOptions(connection, messageService, currentUserId):
-    while 1:
-        switch = menuForLoggedUser()
-        if switch == 1:
-            message = input('message: ')
-            recipient = input('recipient login: ')
-            messageService.sendMessage(message, currentUserId, recipient)
-
-        elif switch == 2:
-            mssList = messageService.connection.smembers(f'sentto:{ currentUserId }')
-            for mssId in mssList:
-                message = messageService.connection.hmget(f'message:{ mssId }', ['messageFromId', 'text', 'status'])
-                messageFromId = message[0]
-                getValueFrom = messageService.connection.hmget(f'user:{ messageFromId }', ['login'])[0]
-                print(f'Message by: { getValueFrom } - { message[1] } ')
-                if message[2] != 'deliver':
-                    connectPipeline = messageService.connection.pipeline(True)
-                    connectPipeline.hset(f'message:{mssId}', 'status', 'deliver')
-                    connectPipeline.hincrby(f'user:{ messageFromId }', 'sent', -1)
-                    connectPipeline.hincrby(f'user:{ messageFromId }', 'deliver', 1)
-                    connectPipeline.execute()
-        elif switch == 3:
-            loggedUser = connection.hmget(f'user:{currentUserId}', ['queue', 'check', 'block', 'sent', 'deliver'])
-            print('QUEUE message: {} || CHECK message: {} ||BLOCK message: {} ||SENT message: {} ||DELIVER message: {}'
-                  .format(*tuple(loggedUser)))
-        elif switch == 0:
-            messageService.logout(currentUserId)
-            connection.publish('users', f'User signed out')
-            return
-
-
 def main():
     connect = redis.Redis(charset='UTF-8', decode_responses=True)
     service = Service(connect)
@@ -57,6 +26,7 @@ def main():
 
     def endH():
         service.logout(currentId)
+
     atexit.register(endH)
     menu = mainMenu
     while 1:
@@ -69,9 +39,36 @@ def main():
             currentId = service.login(login)
             if currentId != -1:
                 connect.publish('users', f'User {login} connected')
-                userOptions(connect, service, currentId)
-            else:
-                print('wrong login')
+                while 1:
+                    switch = menuForLoggedUser()
+                    if switch == 1:
+                        message = input('message: ')
+                        recipient = input('recipient login: ')
+                        service.sendMessage(message, currentId, recipient)
+
+                    elif switch == 2:
+                        mssList = service.connection.smembers(f'sentto:{currentId}')
+                        for mssId in mssList:
+                            message = service.connection.hmget(f'message:{mssId}',
+                                                               ['messageFromId', 'text', 'status'])
+                            messageFromId = message[0]
+                            getValueFrom = service.connection.hmget(f'user:{messageFromId}', ['login'])[0]
+                            print(f'Message by: {getValueFrom} - {message[1]} ')
+                            if message[2] != 'deliver':
+                                connectPipeline = service.connection.pipeline(True)
+                                connectPipeline.hset(f'message:{mssId}', 'status', 'deliver')
+                                connectPipeline.hincrby(f'user:{messageFromId}', 'sent', -1)
+                                connectPipeline.hincrby(f'user:{messageFromId}', 'deliver', 1)
+                                connectPipeline.execute()
+                    elif switch == 3:
+                        loggedUser = connect.hmget(f'user:{currentId}',['queue', 'check', 'block', 'sent', 'deliver'])
+                        print('QUEUE message: {} || CHECK message: {} ||BLOCK message: {} ||SENT message: {} '
+                              '||DELIVER message: {} '
+                                .format(*tuple(loggedUser)))
+                    elif switch == 0:
+                        service.logout(currentId)
+                        connect.publish('users', f'User signed out')
+                        return
         elif switch == 0:
             return
 
